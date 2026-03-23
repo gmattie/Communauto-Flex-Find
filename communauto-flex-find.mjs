@@ -61,7 +61,7 @@ Options:
   ).join(", ")}
   -l, --location <coord>  Location coordinates (example: "43.7, -79.4")
   -d, --distance <meters> Distance radius from location to check (default: 250)
-  -i, --ignore <string>   String containing car models to be ignored, optionally at exact distance in meters (example: "Toyota Corolla, Kia Niro:200")
+  -i, --ignore <string>   String containing car models to be ignored, optionally at exact distance in meters (example: "Toyota Corolla, Kia Niro@200")
   -h, --help              Show this help message
 
 Examples:
