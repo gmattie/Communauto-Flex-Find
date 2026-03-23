@@ -52,7 +52,7 @@ function parseArguments() {
  */
 function displayHelp() {
   console.log(`
-Usage: node flex.mjs [options]
+Usage: node communauto-flex-find.mjs [options]
 
 Options:
   -t, --time <seconds>    Time interval check between requests (default: 15)
@@ -61,13 +61,13 @@ Options:
   ).join(", ")}
   -l, --location <coord>  Location coordinates (example: "43.7, -79.4")
   -d, --distance <meters> Distance radius from location to check (default: 250)
-  -i, --ignore <string>   String containing car models to be ignored, optionally at exact distance in meters (example: "Toyota Corolla, Kia K4:200")
+  -i, --ignore <string>   String containing car models to be ignored, optionally at exact distance in meters (example: "Toyota Corolla, Kia Niro:200")
   -h, --help              Show this help message
 
 Examples:
-  node flex.mjs --time 5 --city montreal --location "45.496325399156305, -73.62030537200324" --distance 250 --ignore "K4, Corolla, Sentra, Elentra, Niro@1000"
-  node flex.mjs --time 5 --city montreal --location "45.501558588301286, -73.56580752510871" --distance 500
-  node flex.mjs --help
+  node communauto-flex-find.mjs --time 5 --city montreal --location "45.496325399156305, -73.62030537200324" --distance 250 --ignore "K4, Corolla, Sentra, Elentra"
+  node communauto-flex-find.mjs --time 5 --city montreal --location "45.501558588301286, -73.56580752510871" --distance 500
+  node communauto-flex-find.mjs --help
 `);
   process.exit();
 }
@@ -154,15 +154,16 @@ function filterCars(cars, distanceRadius, ignoredCars) {
     .filter(
       (car) =>
         car.distance <= distanceRadius &&
-        !ignoredCars.some(
-          (ignored) => {
-            const carModel = car.model.toLowerCase();
-            const ignoredModel = ignored.model;
-            const modelMatches = carModel.includes(ignoredModel) || ignoredModel.includes(carModel);
-            const distanceMatches = ignored.exactDistance === undefined || Math.floor(car.distance) === ignored.exactDistance;
-            return modelMatches && distanceMatches;
-          }
-        ),
+        !ignoredCars.some((ignored) => {
+          const carModel = car.model.toLowerCase();
+          const ignoredModel = ignored.model;
+          const modelMatches =
+            carModel.includes(ignoredModel) || ignoredModel.includes(carModel);
+          const distanceMatches =
+            ignored.exactDistance === undefined ||
+            Math.floor(car.distance) === ignored.exactDistance;
+          return modelMatches && distanceMatches;
+        }),
     )
     .sort((a, b) => a.distance - b.distance);
 }
