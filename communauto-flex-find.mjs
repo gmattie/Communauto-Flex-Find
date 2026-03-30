@@ -9,20 +9,21 @@ const branchIds = {
 
 /**
  * Parses command line arguments and returns the values.
+ *
  * @returns {object} Parsed argument values
  */
 function parseArguments() {
   const { values } = parseArgs({
     options: {
-      time: {
-        type: "string",
-        short: "t",
-        default: "15",
-      },
       city: {
         type: "string",
         short: "c",
         default: "montreal",
+      },
+      time: {
+        type: "string",
+        short: "t",
+        default: "15",
       },
       location: {
         type: "string",
@@ -32,6 +33,11 @@ function parseArguments() {
         type: "string",
         short: "d",
         default: "250",
+      },
+      search: {
+        type: "string",
+        short: "s",
+        default: "",
       },
       ignore: {
         type: "string",
@@ -55,42 +61,65 @@ function displayHelp() {
 Usage: node communauto-flex-find.mjs [options]
 
 Options:
-  -t, --time <seconds>    Time interval check between requests (default: 15)
   -c, --city <name>       City name (default: montreal). Supported cities: ${Object.keys(
     branchIds,
   ).join(", ")}
-  -l, --location <coord>  Location coordinates (example: "43.7, -79.4")
+  -t, --time <seconds>    Time interval check between requests (default: 15)
+  -l, --location <coord>  Location coordinates (example: "45.52009, -73.55571")
   -d, --distance <meters> Distance radius from location to check (default: 250)
-  -i, --ignore <string>   String containing car models to be ignored, optionally at exact distance in meters (example: "Toyota Corolla, Kia Niro@200")
+  -s, --search <string>   String containing car models to be exclusively searched within the radius (example: "Kona, Niro")
+  -i, --ignore <string>   String containing car models, plates and/or models@distance to be ignored (example: "Corolla, FSH4167, Niro@200")
   -h, --help              Show this help message
 
 Examples:
-  node communauto-flex-find.mjs --time 5 --city montreal --location "45.496325399156305, -73.62030537200324" --distance 250 --ignore "K4, Corolla, Sentra, Elentra"
-  node communauto-flex-find.mjs --time 5 --city montreal --location "45.501558588301286, -73.56580752510871" --distance 500
+  node communauto-flex-find.mjs --time 10 --city montreal --location "45.50156, -73.56581" --distance 500 --search "Kona"
+  node communauto-flex-find.mjs --time 5 --city montreal --location "45.49633, -73.62031" --distance 250 --ignore "Corolla, Sentra, Elantra, K4"
   node communauto-flex-find.mjs --help
 `);
   process.exit();
 }
 
 /**
- * Parses the ignore string into an array of objects with model and exactDistance.
- * @param {string} ignoreStr - Comma-separated string of models to ignore
- * @returns {Array<{model: string, exactDistance?: number}>} Array of ignore objects
+ * Parses a comma-separated list of car model filters.
+ *
+ * @param {string} listStr - Comma-separated string of models or ignore terms
+ * @param {object} [options] - Parsing options
+ * @param {boolean} [options.allowExactDistance=false] - Allow exact-distance suffix parsing
+ * @returns {Array<string>|Array<{term: string, exactDistance?: number, plate?: string}>}
  */
-function parseIgnoredCars(ignoreStr) {
-  if (!ignoreStr) return [];
-  return ignoreStr.split(",").map((s) => {
-    const trimmed = s.trim();
-    const [model, dist] = trimmed.split("@").map((x) => x.trim());
-    return {
-      model: model.toLowerCase(),
-      exactDistance: dist ? parseInt(dist) : undefined,
-    };
-  });
+function parseModelList(listStr, { allowExactDistance = false } = {}) {
+  if (!listStr) {
+    return [];
+  }
+
+  return listStr
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((item) => {
+      if (!allowExactDistance) {
+        return item.toLowerCase();
+      }
+
+      if (item.includes("@")) {
+        const [term, dist] = item.split("@").map((x) => x.trim());
+        return {
+          term: term.toLowerCase(),
+          exactDistance: dist ? parseInt(dist) : undefined,
+        };
+      }
+
+      if (/^(?=.*[a-z])(?=.*\d)[a-z\d]{6,7}$/i.test(item)) {
+        return { plate: item.toLowerCase() };
+      }
+
+      return { term: item.toLowerCase() };
+    });
 }
 
 /**
  * Validates the city and returns the branch ID.
+ *
  * @param {string} city - City name
  * @returns {number} Branch ID
  * @throws {Error} If city is not supported
@@ -99,11 +128,13 @@ function getBranchId(city) {
   if (city && !branchIds[city]) {
     throw new Error(`City ${city} not supported.`);
   }
+
   return city ? branchIds[city] : 1;
 }
 
 /**
  * Parses the location string into an array of floats.
+ *
  * @param {string} locationStr - Comma-separated coordinates
  * @returns {number[]} Array of [lat, lng]
  */
@@ -113,19 +144,16 @@ function parseLocation(locationStr) {
 
 /**
  * Fetches available vehicles from the API.
+ *
  * @param {number[]} location - [lat, lng]
  * @param {number} branchId - Branch ID
  * @returns {Promise<Array>} Array of vehicle objects
  */
 async function getCars(location, branchId) {
   const url = `https://www.reservauto.net/WCF/LSI/LSIBookingServiceV3.svc/GetAvailableVehicles?BranchID=${branchId}&LanguageID=2`;
-
-  if (process.env.DEBUG) {
-    console.log("Url: %s", url);
-  }
-
   const result = await retry(async () => await fetch(url));
   const json = await result.json();
+
   return json.d.Vehicles.map((vehicle) => ({
     brand: vehicle.CarBrand,
     model: vehicle.CarModel,
@@ -144,6 +172,7 @@ async function getCars(location, branchId) {
 /**
  * Filters cars based on distance and ignore list.
  * Model matching is bidirectional: ignores if the car model contains the ignored string or vice versa.
+ *
  * @param {Array} cars - Array of car objects
  * @param {number} distanceRadius - Max distance in meters
  * @param {Array} ignoredCars - Array of ignore objects
@@ -156,12 +185,25 @@ function filterCars(cars, distanceRadius, ignoredCars) {
         car.distance <= distanceRadius &&
         !ignoredCars.some((ignored) => {
           const carModel = car.model.toLowerCase();
-          const ignoredModel = ignored.model;
+          const carPlate = car.plate.toLowerCase();
+          const ignoredTerm = ignored.term;
+          const ignoredPlate = ignored.plate;
+
           const modelMatches =
-            carModel.includes(ignoredModel) || ignoredModel.includes(carModel);
+            ignoredTerm &&
+            (carModel.includes(ignoredTerm) || ignoredTerm.includes(carModel));
+          const plateMatches =
+            ignoredPlate &&
+            (carPlate.includes(ignoredPlate) ||
+              ignoredPlate.includes(carPlate));
           const distanceMatches =
             ignored.exactDistance === undefined ||
             Math.floor(car.distance) === ignored.exactDistance;
+
+          if (ignoredPlate) {
+            return plateMatches && (!ignoredTerm || modelMatches);
+          }
+
           return modelMatches && distanceMatches;
         }),
     )
@@ -169,7 +211,83 @@ function filterCars(cars, distanceRadius, ignoredCars) {
 }
 
 /**
+ * Parses the search string into an array of lowercased model names.
+ *
+ * @param {string} searchStr - Comma-separated string of models to search for
+ * @returns {Array<string>} Array of lowercased search terms
+ */
+function parseSearchedCars(searchStr) {
+  return parseModelList(searchStr);
+}
+
+/**
+ * Parses the ignore string into an array of ignore rules.
+ *
+ * @param {string} ignoreStr - Comma-separated string of car models, plates and/or models@distance
+ * @returns {Array<{term: string, exactDistance?: number}>} Array of ignore objects
+ */
+function parseIgnoredCars(ignoreStr) {
+  return parseModelList(ignoreStr, { allowExactDistance: true });
+}
+
+/**
+ * Filters cars by search criteria and ignores.
+ *
+ * @param {Array} cars - Array of car objects
+ * @param {number} distanceRadius - Max search radius in meters
+ * @param {Array<string>} searchedCars - Lowercased model terms to search for
+ * @param {Array<{model: string, exactDistance?: number}>} [ignoredCars=[]] - Ignore list entries
+ * @returns {Array} Filtered and sorted array of cars that match the search criteria
+ */
+function searchCars(cars, distanceRadius, searchedCars, ignoredCars = []) {
+  if (!searchedCars || searchedCars.length === 0) {
+    return [];
+  }
+
+  return cars
+    .filter((car) => {
+      if (car.distance > distanceRadius) {
+        return false;
+      }
+
+      const carModel = car.model.toLowerCase();
+      const carPlate = car.plate.toLowerCase();
+      const isIgnored = ignoredCars.some((ignored) => {
+        const ignoredTerm = ignored.term;
+        const ignoredPlate = ignored.plate;
+
+        const modelMatches =
+          ignoredTerm &&
+          (carModel.includes(ignoredTerm) || ignoredTerm.includes(carModel));
+        const plateMatches =
+          ignoredPlate &&
+          (carPlate.includes(ignoredPlate) || ignoredPlate.includes(carPlate));
+        const distanceMatches =
+          ignored.exactDistance === undefined ||
+          Math.floor(car.distance) === ignored.exactDistance;
+
+        if (ignoredPlate) {
+          return plateMatches && (!ignoredTerm || modelMatches);
+        }
+
+        return modelMatches && distanceMatches;
+      });
+
+      if (isIgnored) {
+        return false;
+      }
+
+      return searchedCars.some((searchModel) => {
+        return carModel.includes(searchModel) || searchModel.includes(carModel);
+      });
+    })
+    .sort((a, b) => a.distance - b.distance);
+}
+
+/**
  * Plays the alert sound.
+ * Tries to play a Windows system sound with PowerShell. If that fails,
+ * falls back to writing a system beep character to stdout.
  */
 function playAlert() {
   try {
@@ -177,7 +295,6 @@ function playAlert() {
       "powershell.exe -c \"$player = New-Object Media.SoundPlayer 'C:\\\\Windows\\\\Media\\\\Windows Hardware Fail.wav'; $player.PlaySync(); $player.PlaySync(); $player.PlaySync();\"",
     );
   } catch (e) {
-    // Fallback to system beep if fails
     process.stdout.write("\u0007");
   }
 }
@@ -195,7 +312,7 @@ async function main() {
   const pause = parseInt(values.time); // Seconds
   const distanceRadius = parseInt(values.distance); // Meters
   const ignoredCars = parseIgnoredCars(values.ignore);
-
+  const searchedCars = parseSearchedCars(values.search);
   const branchId = getBranchId(values.city);
 
   console.log(
@@ -205,24 +322,55 @@ async function main() {
   );
 
   const location = parseLocation(values.location);
+
   console.log("Current location: %s, %s", ...location);
 
   while (true) {
     const cars = await getCars(location, branchId);
+    const searchedResults = searchCars(
+      cars,
+      distanceRadius,
+      searchedCars,
+      ignoredCars,
+    );
     const filteredCars = filterCars(cars, distanceRadius, ignoredCars);
+    const carsWithinRadius = cars.filter(
+      (car) => car.distance <= distanceRadius,
+    );
 
     console.log(
       "%i cars found. %i within %s. Waiting %i seconds",
       cars.length,
-      filteredCars.length,
+      carsWithinRadius.length,
       humanDistance(distanceRadius),
       pause,
     );
 
+    if (searchedCars.length) {
+      if (searchedResults.length) {
+        searchedResults.forEach((car) =>
+          console.log(
+            `\x1b[33m[${car.plate}] ${car.brand} ${car.model}, ${car.color}, is ${Math.floor(car.distance)}m away at {${car.lat}, ${car.lng}}\x1b[0m`,
+          ),
+        );
+
+        playAlert();
+        process.exit(0);
+      }
+
+      console.log(
+        "No searched cars matched after filters; waiting %i seconds",
+        pause,
+      );
+
+      await wait(pause * 1000);
+      continue;
+    }
+
     if (filteredCars.length) {
       filteredCars.forEach((car) =>
         console.log(
-          `\x1b[33m${car.brand} ${car.model} is ${Math.floor(car.distance)}m away\x1b[0m`,
+          `\x1b[33m[${car.plate}] ${car.brand} ${car.model}, ${car.color}, is ${Math.floor(car.distance)}m away\x1b[0m`,
         ),
       );
 
@@ -256,7 +404,6 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
       Math.sin(dLon / 2);
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
   const earthRadius = 6371; // In km
   const distance = earthRadius * c;
 
