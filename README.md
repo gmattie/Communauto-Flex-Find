@@ -35,13 +35,13 @@ node communauto-flex-find.mjs [options]
 Find all available cars in Montreal within 500 meters of a specified location:
 
 ```bash
-node communauto-flex-find.mjs --city montreal --location "45.52272, -73.59192" --distance 500
+node communauto-flex-find.mjs --city montreal --location "45.52260, -73.59184" --distance 500
 ```
 
 Monitor for available cars in Montreal every 10 seconds within 250 meters of a specific location, ignoring certain car models:
 
 ```bash
-node communauto-flex-find.mjs --city montreal --time 10 --location "45.52096, -73.55418" --distance 250 --ignore "Corolla, Sentra, Elantra, K4"
+node communauto-flex-find.mjs --city montreal --time 10 --location "45.52058, -73.55423" --distance 250 --ignore "Corolla, Sentra, Elantra, K4"
 ```
 
 Search for specific car models in Montreal every 30 seconds within 100 meters of a specific location:
@@ -58,7 +58,7 @@ node communauto-flex-find.mjs --help
 
 ## Ignore Filter Syntax
 
-The ignore filter allows you to exclude entire model lines or specific cars from models you would otherwise be interested in taking, for example if it's an EV with a low battery. The `--ignore` option accepts comma-separated car models, plates and/or models@distance. For example:
+The ignore filter allows you to exclude entire model lines or specific cars from models you would otherwise be interested in taking, such as when it's an EV with a low battery. The `--ignore` option accepts comma-separated car models, plates and/or models@distance. For example:
 
 ```bash
 --ignore "Corolla, FSH4167, Niro@200"
@@ -69,7 +69,7 @@ This would ignore all Toyota Corolla vehicles, ignore the car with the plate `FS
 You can also use `--search` and `--ignore` together. For example, to search only for `Kona` but ignore the Kona currently 325 meters away:
 
 ```bash
-node communauto-flex-find.mjs --time 15 --city montreal --location "45.52272, -73.59192" --distance 500 --search "Kona" --ignore "Kona@325"
+node communauto-flex-find.mjs --city montreal --location "45.52272, -73.59192" --distance 500 --search "Kona" --ignore "Kona@325"
 ```
 
 **Note:** Car model filtering is case-insensitive, so `"COROLLA"`, `"Corolla"`, and `"corolla"` are all equivalent.

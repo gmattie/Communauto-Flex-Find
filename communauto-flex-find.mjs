@@ -72,8 +72,9 @@ Options:
   -h, --help              Show this help message
 
 Examples:
-  node communauto-flex-find.mjs --time 10 --city montreal --location "45.50156, -73.56581" --distance 500 --search "Kona"
-  node communauto-flex-find.mjs --time 5 --city montreal --location "45.49633, -73.62031" --distance 250 --ignore "Corolla, Sentra, Elantra, K4"
+node communauto-flex-find.mjs --city montreal --location "45.52260, -73.59184" --distance 500
+  node communauto-flex-find.mjs --city montreal --time 10 --location "45.52058, -73.55423" --distance 250 --ignore "Corolla, Sentra, Elantra, K4"
+  node communauto-flex-find.mjs --city montreal --time 30 --location "45.53237, -73.48881" --distance 100 --search "Kona, Niro"
   node communauto-flex-find.mjs --help
 `);
   process.exit();

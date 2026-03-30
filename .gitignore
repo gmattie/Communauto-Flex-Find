@@ -1,0 +1,24 @@
+# Ignore compiled output and build directories
+/build/
+/dist/
+target/
+
+# Ignore temporary files and logs
+*.log
+*.tmp
+logs/
+temp/
+
+# Ignore sensitive environment variables
+.env
+*.secret
+
+# Ignore OS-specific and editor-specific files
+.DS_Store       # macOS
+Thumbs.db       # Windows
+.vscode/        # VS Code settings
+.idea/          # IntelliJ IDEA settings
+
+# Ignore package manager directories
+node_modules/
+vendor/
